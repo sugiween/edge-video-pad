@@ -27,13 +27,12 @@ function init() {
   if (window.__videoPadInjected) return;
   window.__videoPadInjected = true;
 
-  for (const old of Array.from(document.documentElement.children)) {
-    if (old.getAttribute && old.getAttribute('data-video-pad') === '1') old.remove();
-  }
   const host = document.createElement('div');
   host.setAttribute('data-video-pad', '1');
-  host.setAttribute('popover', 'manual');
-  host.style.cssText = 'position:fixed;inset:auto;left:50%;bottom:80px;transform:translateX(-50%);margin:0;padding:0;border:0;background:transparent;overflow:visible;pointer-events:none;';
+  host.style.cssText = 'position:fixed;left:50%;bottom:80px;transform:translateX(-50%);margin:0;padding:0;border:0;background:transparent;pointer-events:none;z-index:2147483647;';
+  for (const old of Array.from(document.querySelectorAll('[data-video-pad="1"]'))) {
+    if (old !== host) old.remove();
+  }
   const root = host.attachShadow({ mode: 'closed' });
   const style = document.createElement('style');
   style.textContent = `
@@ -93,8 +92,13 @@ function init() {
     pad.appendChild(b);
   }
   root.append(style, pad);
-  document.documentElement.appendChild(host);
-  try { host.showPopover(); } catch (e) {}
+  const ensureParent = () => {
+    try {
+      const want = document.fullscreenElement || document.documentElement;
+      if (host.parentNode !== want) want.appendChild(host);
+    } catch (e) {}
+  };
+  ensureParent();
 
   let timer = null, hovering = false;
   const hide = () => { pad.classList.remove('show'); hovering = false; clearTimeout(timer); };
@@ -105,19 +109,12 @@ function init() {
   pad.addEventListener('mouseenter', () => { hovering = true; clearTimeout(timer); });
   pad.addEventListener('mouseleave', () => { hovering = false; arm(); });
 
-  document.addEventListener('fullscreenchange', () => {
-    setTimeout(() => {
-      try {
-        if (host.matches(':popover-open')) host.hidePopover();
-        host.showPopover();
-      } catch (e) {}
-    }, 100);
-  });
+  document.addEventListener('fullscreenchange', ensureParent);
 
   let lastCheck = 0, lastHas = false;
   document.addEventListener('mousemove', () => {
     const now = Date.now();
-    if (now - lastCheck >= 200) { lastHas = !!findTarget(); lastCheck = now; }
+    if (now - lastCheck >= 200) { ensureParent(); lastHas = !!findTarget(); lastCheck = now; }
     if (!lastHas) { hide(); return; }
     pad.classList.add('show');
     arm();
