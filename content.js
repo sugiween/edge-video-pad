@@ -12,6 +12,17 @@ function pickTarget(candidates) {
   return best.ref;
 }
 
+function stepVolume(cur, delta) {
+  const n = Math.round((cur + delta) * 100) / 100;
+  return Math.min(1, Math.max(0, n));
+}
+
+function sendYtKey(yp, key, code, kc) {
+  yp.dispatchEvent(new KeyboardEvent('keydown', {
+    key, code, keyCode: kc, which: kc, bubbles: true, cancelable: true, composed: true,
+  }));
+}
+
 function findTarget() {
   const vw = window.innerWidth, vh = window.innerHeight;
   const cands = Array.from(document.querySelectorAll('video')).map((v) => {
@@ -46,7 +57,24 @@ function init() {
   const pad = document.createElement('div');
   pad.className = 'pad';
 
+  const volume = (delta, key, code, kc) => {
+    const v = findTarget(); if (!v) return;
+    const yp = v.closest('.html5-video-player');
+    if (yp) sendYtKey(yp, key, code, kc);
+    else v.volume = stepVolume(v.volume, delta);
+  };
   const actions = {
+    volUp: () => volume(0.05, 'ArrowUp', 'ArrowUp', 38),
+    volDown: () => volume(-0.05, 'ArrowDown', 'ArrowDown', 40),
+    ytFull: () => {
+      try {
+        if (document.fullscreenElement) { const p = document.exitFullscreen(); if (p && p.catch) p.catch(() => {}); return; }
+        const v = findTarget(); if (!v) return;
+        const yp = v.closest('.html5-video-player');
+        if (yp) { sendYtKey(yp, 'f', 'KeyF', 70); return; }
+        const p = v.parentElement.requestFullscreen(); if (p && p.catch) p.catch(() => {});
+      } catch (e) {}
+    },
     back: () => { const v = findTarget(); if (v) v.currentTime = Math.max(0, v.currentTime - SEEK_SEC); },
     toggle: () => {
       const v = findTarget(); if (!v) return;
@@ -76,6 +104,9 @@ function init() {
     ['⏯', '再生・停止', 'toggle'],
     ['←', '5秒戻る', 'back'],
     ['→', '5秒進む', 'fwd'],
+    ['↑', '音量を上げる', 'volUp'],
+    ['↓', '音量を下げる', 'volDown'],
+    ['F', 'プレーヤー全画面 (F)', 'ytFull'],
     ['⛶', '全画面切替 (F11)', 'full'],
   ];
   for (const [label, title, key] of defs) {
@@ -122,4 +153,4 @@ function init() {
 }
 
 if (typeof document !== 'undefined') init();
-if (typeof module !== 'undefined') module.exports = { pickTarget };
+if (typeof module !== 'undefined') module.exports = { pickTarget, stepVolume };
