@@ -32,16 +32,17 @@ function init() {
   }
   const host = document.createElement('div');
   host.setAttribute('data-video-pad', '1');
+  host.setAttribute('popover', 'manual');
+  host.style.cssText = 'position:fixed;inset:auto;left:50%;bottom:80px;transform:translateX(-50%);margin:0;padding:0;border:0;background:transparent;overflow:visible;pointer-events:none;';
   const root = host.attachShadow({ mode: 'closed' });
   const style = document.createElement('style');
   style.textContent = `
-    .pad { position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%);
-      z-index: 2147483647; display: none; gap: 8px; padding: 8px;
-      background: rgba(0,0,0,0.6); border-radius: 10px; }
+    .pad { display: none; gap: 4px; padding: 4px;
+      background: rgba(0,0,0,0.6); border-radius: 8px; }
     .pad.show { display: flex; }
-    button { width: 56px; height: 56px; font-size: 24px; color: #fff;
+    button { width: 36px; height: 36px; font-size: 18px; pointer-events: auto; color: #fff;
       background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.4);
-      border-radius: 8px; cursor: pointer; }
+      border-radius: 6px; cursor: pointer; }
     button:hover { background: rgba(255,255,255,0.25); }`;
   const pad = document.createElement('div');
   pad.className = 'pad';
@@ -60,6 +61,10 @@ function init() {
       v.currentTime = t;
     },
     full: () => {
+      if (document.fullscreenElement) {
+        try { const p = document.exitFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+        return;
+      }
       try {
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
           const p = chrome.runtime.sendMessage({ type: 'toggleFullscreen' });
@@ -69,8 +74,8 @@ function init() {
     },
   };
   const defs = [
-    ['←', '5秒戻る', 'back'],
     ['⏯', '再生・停止', 'toggle'],
+    ['←', '5秒戻る', 'back'],
     ['→', '5秒進む', 'fwd'],
     ['⛶', '全画面切替 (F11)', 'full'],
   ];
@@ -89,6 +94,7 @@ function init() {
   }
   root.append(style, pad);
   document.documentElement.appendChild(host);
+  try { host.showPopover(); } catch (e) {}
 
   let timer = null, hovering = false;
   const hide = () => { pad.classList.remove('show'); hovering = false; clearTimeout(timer); };
@@ -99,11 +105,20 @@ function init() {
   pad.addEventListener('mouseenter', () => { hovering = true; clearTimeout(timer); });
   pad.addEventListener('mouseleave', () => { hovering = false; arm(); });
 
+  document.addEventListener('fullscreenchange', () => {
+    setTimeout(() => {
+      try {
+        if (host.matches(':popover-open')) host.hidePopover();
+        host.showPopover();
+      } catch (e) {}
+    }, 100);
+  });
+
   let lastCheck = 0, lastHas = false;
   document.addEventListener('mousemove', () => {
     const now = Date.now();
     if (now - lastCheck >= 200) { lastHas = !!findTarget(); lastCheck = now; }
-    if (document.fullscreenElement || !lastHas) { hide(); return; }
+    if (!lastHas) { hide(); return; }
     pad.classList.add('show');
     arm();
   }, { capture: true, passive: true });
