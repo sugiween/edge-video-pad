@@ -1,5 +1,13 @@
 const SEEK_SEC = 5;
 const HIDE_MS = 2500;
+const REPEAT_DELAY_MS = 500;
+const REPEAT_MS = 300;
+const REPEAT_KEYS = ['back', 'fwd', 'volUp', 'volDown'];
+
+// 連打ボタンの pointerdown で連打を開始するか (主ボタンのみ)
+function shouldStartRepeat(button, key) {
+  return button === 0 && REPEAT_KEYS.includes(key);
+}
 
 // candidates: [{area, visible, paused, ref}] -> ref | null
 function pickTarget(candidates) {
@@ -109,16 +117,43 @@ function init() {
     ['F', 'プレーヤー全画面 (F)', 'ytFull'],
     ['⛶', '全画面切替 (F11)', 'full'],
   ];
+  let delayTimer = null, repTimer = null, repeating = false, hovering = false;
+  const stopRepeat = () => {
+    clearTimeout(delayTimer); clearInterval(repTimer);
+    delayTimer = repTimer = null;
+    if (repeating) {
+      repeating = false;
+      try { hovering = pad.matches(':hover'); } catch (e) {}
+      arm();
+    }
+  };
+  const startRepeat = (fn) => {
+    stopRepeat();
+    repeating = true;
+    clearTimeout(timer);
+    const safe = () => { try { fn(); } catch (e) {} };
+    safe();
+    delayTimer = setTimeout(() => {
+      repTimer = setInterval(safe, REPEAT_MS);
+    }, REPEAT_DELAY_MS);
+  };
   for (const [label, title, key] of defs) {
     const b = document.createElement('button');
     b.textContent = label;
     b.title = title;
+    const repeats = REPEAT_KEYS.includes(key);
     for (const ev of ['pointerdown', 'mousedown', 'mouseup', 'click', 'dblclick']) {
       b.addEventListener(ev, (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (ev === 'click') actions[key]();
+        if (ev === 'pointerdown' && shouldStartRepeat(e.button, key)) {
+          try { b.setPointerCapture(e.pointerId); } catch (err) {}
+          startRepeat(actions[key]);
+        } else if (ev === 'click' && (!repeats || e.detail === 0)) actions[key]();
       });
+    }
+    if (repeats) {
+      for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, stopRepeat);
     }
     pad.appendChild(b);
   }
@@ -131,16 +166,19 @@ function init() {
   };
   ensureParent();
 
-  let timer = null, hovering = false;
-  const hide = () => { pad.classList.remove('show'); hovering = false; clearTimeout(timer); };
+  let timer = null;
+  const hide = () => { stopRepeat(); pad.classList.remove('show'); hovering = false; clearTimeout(timer); };
   const arm = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => { if (!hovering) hide(); }, HIDE_MS);
+    timer = setTimeout(() => { if (!hovering && !repeating) hide(); }, HIDE_MS);
   };
   pad.addEventListener('mouseenter', () => { hovering = true; clearTimeout(timer); });
   pad.addEventListener('mouseleave', () => { hovering = false; arm(); });
 
-  document.addEventListener('fullscreenchange', ensureParent);
+  document.addEventListener('fullscreenchange', () => { ensureParent(); stopRepeat(); });
+  document.addEventListener('pointerup', stopRepeat, true);
+  window.addEventListener('blur', stopRepeat);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') stopRepeat(); });
 
   let lastCheck = 0, lastHas = false;
   document.addEventListener('mousemove', () => {
@@ -153,4 +191,4 @@ function init() {
 }
 
 if (typeof document !== 'undefined') init();
-if (typeof module !== 'undefined') module.exports = { pickTarget, stepVolume };
+if (typeof module !== 'undefined') module.exports = { pickTarget, stepVolume, shouldStartRepeat };
